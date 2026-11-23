@@ -309,7 +309,7 @@ test('buildOpenVpnCommand adds isolated routing flags for Linux and macOS', () =
   });
   assert.equal(macCmd.devName, null);
   assert.ok(macCmd.args.includes('--route-noexec'));
-  assert.ok(macCmd.args.includes('utun'));
+  assert.ok(macCmd.args.includes('tun'));
 });
 
 test('parseUtunDevice, parseIpv4FromIpAddr, resolveOpenVpnBin, and withCurlInterface', () => {

@@ -199,7 +199,7 @@ export function buildOpenVpnCommand({
       devName = `rocurl${slot}`;
       ovpnArgs.push('--dev', devName, '--dev-type', 'tun');
     } else if (platform === 'darwin') {
-      ovpnArgs.push('--dev', 'utun');
+      ovpnArgs.push('--dev', 'tun');
     }
   }
 
