@@ -12,6 +12,7 @@ import {
   buildOpenVpnCommand,
   connectOpenVpn,
   createAuthFile,
+  extractFatalDetail,
   parseIpv4FromIpAddr,
   parseOpenVpnLogLine,
   parseUtunDevice,
@@ -106,6 +107,14 @@ test('parseOpenVpnLogLine detects readiness and fatal errors', () => {
     { type: 'error', message: 'Authentication failed (AUTH_FAILED)' },
   );
   assert.equal(parseOpenVpnLogLine('Peer Connection Initiated with [AF_INET]1.2.3.4:1194'), null);
+  assert.deepEqual(parseOpenVpnLogLine('2026-11-22 22:41:26 Exiting due to fatal error'), { type: 'fatal' });
+  assert.equal(
+    extractFatalDetail([
+      '2026-11-22 22:41:26 WARNING: Failed running command (--up/--down): could not execute external program',
+      '2026-11-22 22:41:26 Exiting due to fatal error',
+    ]),
+    '2026-11-22 22:41:26 WARNING: Failed running command (--up/--down): could not execute external program',
+  );
 });
 
 test('createAuthFile writes 0600 credentials file and cleans up completely', async () => {

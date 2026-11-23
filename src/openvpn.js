@@ -11,9 +11,9 @@ const FATAL_PATTERNS = [
   { regex: /Cannot open TUN\/TAP dev/i, message: 'Cannot open TUN/TAP device (try running with sudo)' },
   { regex: /Operation not permitted/i, message: 'Operation not permitted (root/sudo required)' },
   { regex: /Options error:\s*(.+)/i, message: null },
-  { regex: /Exiting due to fatal error/i, message: 'OpenVPN exited due to a fatal error' },
   { regex: /RESOLVE: Cannot resolve host address/i, message: 'Cannot resolve VPN server hostname' },
 ];
+const GENERIC_FATAL_PATTERN = /Exiting due to fatal error/i;
 
 const FALLBACK_OPENVPN_PATHS = [
   '/opt/homebrew/sbin/openvpn',
@@ -34,6 +34,9 @@ export function parseOpenVpnLogLine(line) {
   if (READY_PATTERN.test(line)) {
     return { type: 'ready' };
   }
+  if (GENERIC_FATAL_PATTERN.test(line)) {
+    return { type: 'fatal' };
+  }
   for (const pattern of FATAL_PATTERNS) {
     const match = line.match(pattern.regex);
     if (match) {
@@ -44,6 +47,21 @@ export function parseOpenVpnLogLine(line) {
     }
   }
   return null;
+}
+
+/**
+ * Pick the most informative preceding error line from recent OpenVPN logs.
+ * @param {string[]} recentLogs
+ * @returns {string}
+ */
+export function extractFatalDetail(recentLogs) {
+  for (let i = recentLogs.length - 1; i >= 0; i -= 1) {
+    const line = recentLogs[i];
+    if (!GENERIC_FATAL_PATTERN.test(line)) {
+      return line;
+    }
+  }
+  return 'OpenVPN exited due to a fatal error';
 }
 
 /**
@@ -468,6 +486,12 @@ export function connectOpenVpn(options) {
           lastError = event.message;
           if (!settled) {
             fail(event.message);
+          }
+        } else if (event.type === 'fatal') {
+          const detail = lastError ?? extractFatalDetail(recentLogs);
+          lastError = detail;
+          if (!settled) {
+            fail(detail);
           }
         }
       }
