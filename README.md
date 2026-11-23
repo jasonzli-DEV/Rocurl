@@ -1,6 +1,6 @@
 # Rocurl
 
-Run a `curl` command sequentially through every OpenVPN (`.ovpn`) profile in a folder, using a single shared username and password, and get a summary of the completed work.
+Run a `curl` command through every OpenVPN (`.ovpn`) profile in a folder (in parallel or sequentially), using a single shared username and password, and get a summary of the completed work.
 
 ## Usage
 
@@ -20,12 +20,10 @@ When you run `rocurl`, it will:
 1. Find all `.ovpn` files in the current directory (or `--dir`).
 2. Prompt you once for your OpenVPN username and password (password input is hidden).
 3. Request `sudo` if needed to start OpenVPN tunnels.
-4. For each `.ovpn` profile:
-   - Connect to OpenVPN using a temporary `0600` credentials file.
-   - Wait for `Initialization Sequence Completed`.
-   - Execute your `curl` command through the tunnel.
-   - Cleanly disconnect OpenVPN before moving to the next profile.
-5. Delete the temporary credentials file and print a summary table of all results.
+4. Connect up to `--concurrency` profiles at once (default: `5` on Linux/macOS, `1` on Windows):
+   - In concurrent mode (`--concurrency > 1`), each tunnel runs with `--route-noexec` and an isolated per-tunnel route (Linux policy routing via `ip rule`/`ip route` table; macOS interface-scoped route via `route add -ifscope`), and each `curl` binds to its tunnel via `--interface` so parallel tunnels never conflict or hijack your host default route.
+   - In sequential mode (`--concurrency 1`), each profile connects as a standard full tunnel one at a time.
+5. Cleanly disconnect all tunnels, delete the temporary `0600` credentials file, and print a summary table of all results.
 
 ## Options
 
@@ -34,8 +32,10 @@ Rocurl options must be placed **before** the `curl` command (or before `--`):
 | Option | Description |
 | --- | --- |
 | `--dir <path>` | Directory containing `.ovpn` files (default: current directory) |
+| `--concurrency <n>` | Number of VPN profiles to run in parallel (default: `5` on Linux/macOS, `1` on Windows) |
 | `--timeout <seconds>` | OpenVPN connection timeout in seconds (default: `30`) |
 | `--curl-timeout <seconds>` | Maximum seconds to wait for each `curl` command |
+| `--openvpn-bin <path>` | Path to the `openvpn` binary (default: auto-detected, including Homebrew `/opt/homebrew/sbin/openvpn`) |
 | `--user <username>` | OpenVPN username (or set `ROCURL_USER`) |
 | `--pass <password>` | OpenVPN password (or set `ROCURL_PASS`) |
 | `--no-sudo` | Do not prefix `openvpn` with `sudo` |
@@ -46,8 +46,14 @@ Rocurl options must be placed **before** the `curl` command (or before `--`):
 ## Examples
 
 ```bash
-# Simple GET request across all profiles in the current directory
+# Run 5 profiles at a time (default on Linux/macOS)
 npx rocurl curl -s https://api.ipify.org
+
+# Scale up to 10 parallel VPN connections
+npx rocurl --concurrency 10 curl -s https://api.ipify.org
+
+# Run sequentially (one full-tunnel VPN at a time)
+npx rocurl --concurrency 1 curl -s https://api.ipify.org
 
 # Pass custom headers and POST data
 npx rocurl -s -X POST -H "Content-Type: application/json" -d '{"ping":true}' https://httpbin.org/post
@@ -62,6 +68,6 @@ npx rocurl --dry-run curl -s https://api.ipify.org
 ## Requirements
 
 - Node.js >= 18
-- `openvpn` installed and on `PATH`
+- `openvpn` installed (auto-detected on `PATH`, `/opt/homebrew/sbin/openvpn`, `/usr/local/sbin/openvpn`, `/usr/sbin/openvpn`)
 - `curl` installed and on `PATH`
-- Root or `sudo` access (required by OpenVPN to create TUN/TAP interfaces and update routes)
+- Root or `sudo` access (required by OpenVPN to create TUN/TAP interfaces and configure routes)

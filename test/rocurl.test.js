@@ -5,14 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 
-import { parseArgs } from '../src/cli.js';
+import { parseArgs, runWithConcurrency, withCurlInterface } from '../src/cli.js';
 import { discoverProfiles } from '../src/profiles.js';
 import { getCredentials } from '../src/prompt.js';
 import {
   buildOpenVpnCommand,
   connectOpenVpn,
   createAuthFile,
+  parseIpv4FromIpAddr,
   parseOpenVpnLogLine,
+  parseUtunDevice,
+  resolveOpenVpnBin,
 } from '../src/openvpn.js';
 import { runCurl } from '../src/curl.js';
 import { formatSummary } from '../src/summary.js';
@@ -251,4 +254,97 @@ test('formatSummary renders counts and aligned rows', () => {
   assert.match(summary, /us-east\.ovpn\s+OK\s+2\.1s\s+350ms\s+203\.0\.113\.10/);
   assert.match(summary, /eu-west\.ovpn\s+VPN ERR/);
   assert.match(summary, /jp-tokyo\.ovpn\s+CURL\(7\)/);
+});
+
+test('parseArgs parses --concurrency and --openvpn-bin and validates --concurrency', () => {
+  const parsed = parseArgs([
+    '--concurrency',
+    '8',
+    '--openvpn-bin',
+    '/opt/homebrew/sbin/openvpn',
+    'curl',
+    '-s',
+    'https://api.ipify.org',
+  ]);
+  assert.equal(parsed.concurrency, 8);
+  assert.equal(parsed.openvpnBin, '/opt/homebrew/sbin/openvpn');
+  assert.deepEqual(parsed.curlArgs, ['-s', 'https://api.ipify.org']);
+
+  assert.throws(() => parseArgs(['--concurrency', '0', 'https://example.com']), /positive integer/);
+  assert.throws(() => parseArgs(['--concurrency', '2.5', 'https://example.com']), /positive integer/);
+});
+
+test('buildOpenVpnCommand adds isolated routing flags for Linux and macOS', () => {
+  const linuxCmd = buildOpenVpnCommand({
+    profilePath: '/tmp/vpns/us.ovpn',
+    authFile: '/tmp/rocurl/auth.txt',
+    pidFile: '/tmp/rocurl/ovpn.pid',
+    useSudo: true,
+    isolated: true,
+    slot: 3,
+    platform: 'linux',
+  });
+  assert.equal(linuxCmd.devName, 'rocurl3');
+  assert.ok(linuxCmd.args.includes('--route-noexec'));
+  assert.ok(linuxCmd.args.includes('rocurl3'));
+  assert.ok(linuxCmd.args.includes('--dev-type'));
+
+  const macCmd = buildOpenVpnCommand({
+    profilePath: '/tmp/vpns/us.ovpn',
+    authFile: '/tmp/rocurl/auth.txt',
+    pidFile: '/tmp/rocurl/ovpn.pid',
+    useSudo: true,
+    isolated: true,
+    slot: 2,
+    platform: 'darwin',
+  });
+  assert.equal(macCmd.devName, null);
+  assert.ok(macCmd.args.includes('--route-noexec'));
+  assert.ok(macCmd.args.includes('utun'));
+});
+
+test('parseUtunDevice, parseIpv4FromIpAddr, resolveOpenVpnBin, and withCurlInterface', () => {
+  assert.equal(parseUtunDevice('2026-11-22 22:00:00 Opened utun device utun7'), 'utun7');
+  assert.equal(parseUtunDevice('unrelated log line'), null);
+
+  assert.equal(
+    parseIpv4FromIpAddr('12: rocurl0    inet 10.2.0.2/16 scope global rocurl0\\       valid_lft forever'),
+    '10.2.0.2',
+  );
+  assert.equal(parseIpv4FromIpAddr(''), null);
+
+  assert.equal(resolveOpenVpnBin('/custom/openvpn'), '/custom/openvpn');
+  assert.ok(resolveOpenVpnBin().includes('openvpn'));
+
+  assert.deepEqual(withCurlInterface(['-s', 'https://api.ipify.org'], '10.2.0.2'), [
+    '--interface',
+    '10.2.0.2',
+    '-s',
+    'https://api.ipify.org',
+  ]);
+  assert.deepEqual(withCurlInterface(['--interface', 'eth0', 'https://api.ipify.org'], '10.2.0.2'), [
+    '--interface',
+    'eth0',
+    'https://api.ipify.org',
+  ]);
+});
+
+test('runWithConcurrency executes in parallel with bounded slots and preserves order', async () => {
+  const items = ['a', 'b', 'c', 'd', 'e', 'f'];
+  let active = 0;
+  let maxActive = 0;
+  const usedSlots = new Set();
+
+  const results = await runWithConcurrency(items, 3, async (item, index, slot) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    usedSlots.add(slot);
+    await new Promise((r) => setTimeout(r, 25));
+    active -= 1;
+    return `${index}:${item}`;
+  });
+
+  assert.deepEqual(results, ['0:a', '1:b', '2:c', '3:d', '4:e', '5:f']);
+  assert.equal(maxActive, 3);
+  assert.deepEqual([...usedSlots].sort(), [0, 1, 2]);
 });
