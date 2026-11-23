@@ -1,0 +1,38 @@
+{
+  "name": "rocurl",
+  "version": "1.0.0",
+  "description": "Run a curl command sequentially through every OpenVPN (.ovpn) profile in a folder",
+  "type": "module",
+  "bin": {
+    "rocurl": "./bin/rocurl.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "curl",
+    "openvpn",
+    "vpn",
+    "ovpn",
+    "cli",
+    "proxy",
+    "rotate"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jasonzli-DEV/Rocurl.git"
+  },
+  "homepage": "https://github.com/jasonzli-DEV/Rocurl#readme",
+  "bugs": {
+    "url": "https://github.com/jasonzli-DEV/Rocurl/issues"
+  },
+  "license": "MIT"
+}
