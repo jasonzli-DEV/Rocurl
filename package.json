@@ -4,7 +4,7 @@
   "description": "Run a curl command sequentially through every OpenVPN (.ovpn) profile in a folder",
   "type": "module",
   "bin": {
-    "rocurl": "./bin/rocurl.js"
+    "rocurl": "bin/rocurl.js"
   },
   "files": [
     "bin",
